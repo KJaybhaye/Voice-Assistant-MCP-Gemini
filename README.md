@@ -9,7 +9,7 @@ Features:
 - Background listening and detection of command for assistant
 - UI using Tkinter
 - Gemini API support
-- Continuos chat withou needing to press send button
+- Continues chat without needing to press send button
 
 Note:
 -
