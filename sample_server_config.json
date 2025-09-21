@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "ankiServer": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "Path to server directory",
+        "run",
+        "MCP_script.py"
+      ]
+    }
+  }
+}

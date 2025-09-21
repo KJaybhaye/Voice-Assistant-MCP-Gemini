@@ -1,0 +1,18 @@
+[project]
+name = "voice-assistant"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "torch==2.6.0",
+    "torchaudio==2.6.0",
+    "faster-whisper>=1.2.0",
+    "google-genai>=1.38.0",
+    "httpx>=0.28.1",
+    "mcp[cli]>=1.14.1",
+    "pyaudio>=0.2.14",
+    "pyttsx3>=2.99",
+    "speechrecognition>=3.14.3",
+    "beautifulsoup4>=4.13.5",
+]
