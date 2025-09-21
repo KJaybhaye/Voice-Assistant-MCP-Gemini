@@ -9,7 +9,6 @@ wheels/
 .venv
 .env
 
-server_config.json
 temp.py
 temp.txt
 audio.wav
