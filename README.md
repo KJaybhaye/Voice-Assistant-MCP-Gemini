@@ -13,4 +13,21 @@ Features:
 
 Note:
 -
-To use run Whisper model(for transcribing audio to text) on GPU, install PyTorch for GPU. [Official Intructions](https://pytorch.org/get-started/locally/)
+- To use run Whisper model(for transcribing audio to text) on GPU, install PyTorch for GPU. [Official Intructions](https://pytorch.org/get-started/locally/)
+- Create a `.env` file and add your Google API as a "GOOGLE_API_KEY" variable
+- To add other local MCP files modify server_config.json file and provide full path to directory. E.g.  
+```
+"mcpServers": {
+    "ankiServer": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "Path to server directory",
+        "run",
+        "MCP_script.py"
+      ]
+    }
+  }
+```    
+- To change Gemini Model, Whisper model etc modify `config.toml`
+
