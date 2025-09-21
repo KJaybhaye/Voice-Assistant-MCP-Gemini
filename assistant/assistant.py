@@ -86,7 +86,7 @@ class Assistant:
         """Get response from LLM-MCP client and process it"""
         if not query:
             return
-        print("Query: ", query)
+        print("User: ", query)
         self.ui_notification.put("Processing")
         await self.add_to_history("user", query)
         # print("got response")
@@ -124,11 +124,11 @@ class Assistant:
             with open("audio.wav", "wb") as f:
                 f.write(audio.get_wav_data())
             query = self.transcribe("audio.wav")
-            print("pp query", query)
+            # print("pp query", query)
             # to do
             query = get_query(query, start_word)
             if query is None:
-                print("not", query)
+                # print("not", query)
                 return
             asyncio.run(self.foreground_chat(query))
         except Exception as e:
@@ -149,13 +149,11 @@ class Assistant:
                 query = self.transcribe("audio.wav")
                 if not self.started:
                     query = get_query(query, start_word)
-                    if query is None:
-                        print("not", query)
-                    else:
+                    if query:
                         self.started = True
                         self.ui_notification.put("Listening.")
                     return
-            print("user", query)
+            print("User: ", query)
             if query == "quit" or query == "exit":
                 self.started = False
                 return
