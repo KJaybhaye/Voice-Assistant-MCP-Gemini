@@ -1,5 +1,3 @@
-from typing import Optional, Any, Literal
-import httpx
 from mcp.server.fastmcp import FastMCP, Image as Mcp_Image
 from PIL import ImageGrab, Image
 import os
