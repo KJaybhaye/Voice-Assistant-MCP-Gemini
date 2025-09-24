@@ -17,6 +17,7 @@ with open("config.toml", "rb") as f:
 
 sys_message = config["SYS_INST"]
 MODEL = config["MODEL"]
+server_config_path = config["server_config"]
 
 
 class MCPClient:
@@ -28,7 +29,7 @@ class MCPClient:
         self.mcp_tools: list[mcp_types.Tool] = []
         self.parameters: dict[str, dict] = {}
 
-    async def connect_to_server(self, server_config_path: str) -> bool:
+    async def connect_to_server(self) -> bool:
         """Connect to an MCP server
 
         Args:
@@ -146,9 +147,8 @@ class MCPClient:
 
 async def main():
     client = MCPClient()
-    json_path = "server_config.json"
     try:
-        await client.connect_to_server(json_path)
+        await client.connect_to_server()
         await client.init_chat()
         await client.chat_loop()
     finally:

@@ -15,9 +15,9 @@ def run_ui():
     ui.run()
 
 
-async def main(path: str) -> None:
+async def main() -> None:
     try:
-        await client.connect_to_server(path)
+        await client.connect_to_server()
         await client.init_chat()
 
         bg_thread = threading.Thread(
@@ -37,8 +37,6 @@ async def main(path: str) -> None:
 if __name__ == "__main__":
     import sys
 
-    json_path = "server_config.json"
-
     client = MCPClient()
     message_queue = Queue()
     conversation_history = deque(maxlen=100)
@@ -54,7 +52,7 @@ if __name__ == "__main__":
     )
 
     try:
-        asyncio.run(main(json_path))
+        asyncio.run(main())
     except KeyboardInterrupt:
         print("\nShutting down...")
         sys.exit(0)

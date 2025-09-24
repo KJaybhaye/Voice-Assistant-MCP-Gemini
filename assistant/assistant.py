@@ -21,7 +21,7 @@ with open("config.toml", "rb") as f:
 
 whisper_model = config["whisper_model"]
 start_word = config["start_word"]
-json_path = config["json_path"]
+json_path = config["server_config"]
 
 recognizer = sr.Recognizer()
 microphone = sr.Microphone()
@@ -230,10 +230,10 @@ def run_ui():
     ui.run()
 
 
-async def main(path):
+async def main():
     ass = Assistant(client, message_queue, conversation_history, return_queue)
     try:
-        await client.connect_to_server(path)
+        await client.connect_to_server()
         await client.init_chat()
 
         bg_thread = threading.Thread(target=ass.start_background_chat, daemon=True)
@@ -258,7 +258,7 @@ if __name__ == "__main__":
     return_queue = Queue()
     notification_queue = Queue()
     try:
-        asyncio.run(main(json_path))
+        asyncio.run(main())
     except KeyboardInterrupt:
         print("\nShutting down...")
         sys.exit(0)
