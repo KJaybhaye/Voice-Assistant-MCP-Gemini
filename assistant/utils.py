@@ -6,7 +6,10 @@ def get_query(query, word):
     pattern = rf"\b{re.escape(word)}\b(.*)"
     m = re.search(pattern, query, re.IGNORECASE)
     if m:
-        return m.group(1).strip()
+        query = m.group(1).strip()
+        if len(query) < 3:
+            return
+        return query
     else:
         return None
 
