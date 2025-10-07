@@ -1,10 +1,16 @@
 import asyncio
 from collections import deque
 from queue import Queue
+import threading
+import sys
+import warnings
+
+if not sys.warnoptions:
+    warnings.simplefilter("ignore")
+
 from assistant.assistant import Assistant
 from assistant.client import MCPClient
 from assistant.tk_ui import ConversationUI
-import threading
 
 
 def run_ui():
@@ -35,8 +41,6 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    import sys
-
     client = MCPClient()
     message_queue = Queue()
     conversation_history = deque(maxlen=100)
