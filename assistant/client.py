@@ -35,6 +35,7 @@ class MCPClient:
         Args:
             server_script_path: Path to the server config file (.json)
         """
+        print("Connecting to MCP Server...")
         try:
             with open(server_config_path, "r") as f:
                 params = json.load(f)
@@ -97,16 +98,15 @@ class MCPClient:
         """Process a query using model and available tools"""
         curr_query = types.Part(text=query)
         i = 0
-        while i < 3:
+        while i < 5:
             response = await self.get_response(curr_query)
             f_call = False
 
             async for chunk in response:
                 if fun_call := chunk.candidates[0].content.parts[0].function_call:  # type: ignore
                     f_call = True
-                    function_call = fun_call
-                    tool_name = function_call.name
-                    tool_args = function_call.args
+                    tool_name = fun_call.name
+                    tool_args = fun_call.args
 
                     result = await self.call_tool(tool_name, tool_args)  # type: ignore
                     print(f"\n[Calling tool {tool_name} with args {tool_args}]")
@@ -118,7 +118,7 @@ class MCPClient:
                     yield (chunk.text)
             i += 1
             if not f_call:
-                break
+                return
 
     async def chat_loop(self) -> None:
         """Run an interactive chat loop"""
