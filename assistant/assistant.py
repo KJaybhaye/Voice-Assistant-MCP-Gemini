@@ -5,15 +5,17 @@ from faster_whisper import WhisperModel
 import asyncio
 import os
 import time
-import pyttsx3
 from collections import deque
-from queue import Queue
+from queue import Queue, Empty
 from datetime import datetime
 import torch
 from assistant.client import MCPClient
 from assistant.tk_ui import ConversationUI
 from assistant.utils import get_query
 import tomllib
+from kokoro import KPipeline
+import numpy as np
+import pyaudio
 
 load_dotenv()
 with open("config.toml", "rb") as f:
@@ -26,9 +28,14 @@ json_path = config["server_config"]
 recognizer = sr.Recognizer()
 microphone = sr.Microphone()
 
+PIPELINE = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
+finish_token = object()
+speak_queue = Queue()
+audio_buffer = np.array([], dtype=np.float32)
+
 if torch.cuda.is_available():
     model = WhisperModel(model_size_or_path=whisper_model, device="cuda")
-    print("Using cuda")
+    print("Whisper is using Cuda")
 else:
     num_cores = os.cpu_count()
     if not num_cores:
@@ -60,6 +67,7 @@ class Assistant:
         self.ui_notification = ui_notification
         self.th = None
         self.client = client
+        self.speak_queue = Queue(50)
 
     def listen(self, path: str = "audio.wav") -> str:
         """Listen for audio and save to file"""
@@ -89,10 +97,8 @@ class Assistant:
         print("User: ", query)
         self.ui_notification.put("Processing")
         await self.add_to_history("user", query)
-        # print("got response")
         response_text = self.client.process_query(query)
-        ft = await self.process_response(response_text)
-        await self.add_to_history("assistant", ft)
+        await self.process_response(response_text)
         self.ui_notification.put("Listening")
 
     async def foreground_chat(self, query: str | None = None) -> None:
@@ -101,7 +107,7 @@ class Assistant:
             await self.process_query(query)
         else:
             self.ui_notification.put("Listening")
-            pyttsx3.speak("Hello user!")
+            speak("Hello User!")
             await self.add_to_history("assistant", "Hello User!")
 
         if self.stop_listening is not None:
@@ -128,7 +134,6 @@ class Assistant:
             # to do
             query = get_query(query, start_word)
             if query is None:
-                # print("not", query)
                 return
             asyncio.run(self.foreground_chat(query))
         except Exception as e:
@@ -169,13 +174,14 @@ class Assistant:
     def start_background_chat(self) -> None:
         """Start background listening"""
         if not self.m_started:
+            print("Adjusting for ambient noise...")
             with microphone as source:
                 recognizer.energy_threshold = 500
                 recognizer.adjust_for_ambient_noise(source, 3)
                 recognizer.dynamic_energy_threshold = True
             self.m_started = True
         print("Listening...")
-        self.ui_notification.put(f"Wake up with {start_word}")
+        self.ui_notification.put(f"Say {start_word} to start conversation")
         self.stop_listening = recognizer.listen_in_background(
             microphone, self.start_foreground_chat
         )
@@ -196,32 +202,128 @@ class Assistant:
         if self.ws_manager:
             await self.ws_manager.broadcast(message)
 
-    async def process_response(self, response_text) -> str:
-        """Process response from LLM-MCP client"""
-        if self.th:
-            self.th.join()
-        full_text = ""
-        curr_text = ""
-        th = None
-        sentence_terminators = {".", "!", "?"}
-        async for w in response_text:
-            print(w, end="")
-            full_text += w
-            curr_text += w
-            if curr_text.rstrip()[-1] in sentence_terminators:
-                if not th or not th.is_alive():
-                    if th:
-                        th.join()
-                    th = threading.Thread(target=pyttsx3.speak(curr_text))
+    async def generate_audio(self, response, f=None):
+        """Generate audio from response object and add to history"""
+        try:
+            print("Assistant: ")
+            full_text = ""
+            curr_text = ""
+            sentence_terminators = {".", "!", "?"}
+            async for w in response:
+                print(w, end="")
+                full_text += w
+                curr_text += w
+                if curr_text.rstrip()[-1] in sentence_terminators:
+                    for _, _, aud in PIPELINE(curr_text, voice="af_heart"):
+                        speak_queue.put(np.array(aud.tolist(), dtype=np.float32))  # type: ignore
                     curr_text = ""
-                    th.start()
-        if th:
-            th.join()
-        if curr_text:
-            self.th = threading.Thread(target=pyttsx3.speak(curr_text))
-            self.th.start()
-        print("\n")
-        return full_text
+            speak_queue.put(finish_token)
+            print("\n")
+            if f:
+                f.set_result(full_text)
+                return full_text
+            else:
+                await self.add_to_history("assistant", full_text)
+        except Exception as e:
+            print(f"Error in audio generation: {e}")
+            speak_queue.put(finish_token)
+
+    async def process_response(self, response_text):
+        """Process response from LLM-MCP client"""
+        future = asyncio.Future()
+        t = asyncio.get_event_loop().create_task(
+            self.generate_audio(response_text, future)
+        )
+
+        p = pyaudio.PyAudio()
+        stream = p.open(
+            format=pyaudio.paFloat32,
+            channels=1,
+            rate=24000,
+            output=True,
+            frames_per_buffer=1024,
+            stream_callback=pyaudio_callback,
+        )
+
+        stream.start_stream()
+
+        try:
+            await t
+            while stream.is_active():
+                time.sleep(0.1)
+            await self.add_to_history("assistant", future.result())
+        finally:
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
+
+
+def speak(text):
+    p = pyaudio.PyAudio()
+    stream = p.open(
+        format=pyaudio.paFloat32,
+        channels=1,
+        rate=24000,
+        frames_per_buffer=1024,
+        output=True,
+    )
+
+    try:
+        for _, _, aud in PIPELINE(text, voice="af_heart"):
+            data = np.array(aud.tolist(), dtype=np.float32)  # type: ignore
+            stream.write(data.tobytes())
+    finally:
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+
+
+def pyaudio_callback(in_data, frame_count, time_info, status):
+    global audio_buffer
+
+    try:
+        while len(audio_buffer) < frame_count:
+            try:
+                data = speak_queue.get_nowait()
+                if data is finish_token:
+                    # If we have remaining data, return it
+                    if len(audio_buffer) > 0:
+                        if len(audio_buffer) < frame_count:
+                            padding = np.zeros(
+                                frame_count - len(audio_buffer), dtype=np.float32
+                            )
+                            audio_buffer = np.concatenate([audio_buffer, padding])
+                        output_data = audio_buffer[:frame_count]
+                        audio_buffer = np.array([], dtype=np.float32)
+                        return (output_data.tobytes(), pyaudio.paComplete)
+                    else:
+                        return (
+                            np.zeros(frame_count, dtype=np.float32).tobytes(),
+                            pyaudio.paComplete,
+                        )
+
+                audio_buffer = np.concatenate([audio_buffer, data])
+            except Empty:
+                break
+
+        if len(audio_buffer) >= frame_count:  # enough data
+            output_data = audio_buffer[:frame_count]
+            audio_buffer = audio_buffer[frame_count:]  # Keep remaining data
+            return (output_data.tobytes(), pyaudio.paContinue)
+        else:
+            # Not enough data, pad with zeros
+            if len(audio_buffer) > 0:
+                padding = np.zeros(frame_count - len(audio_buffer), dtype=np.float32)
+                output_data = np.concatenate([audio_buffer, padding])
+                audio_buffer = np.array([], dtype=np.float32)
+            else:
+                output_data = np.zeros(frame_count, dtype=np.float32)
+
+            return (output_data.tobytes(), pyaudio.paContinue)
+
+    except Exception as e:
+        print(f"Error in callback: {e}")
+        return (np.zeros(frame_count, dtype=np.float32).tobytes(), pyaudio.paComplete)
 
 
 def run_ui():
